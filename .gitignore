@@ -16,6 +16,9 @@ backend/.env
 backend/laptops.db
 *.db
 
+# Phase 5 live-price JSON cache (regenerates on demand, 24h TTL)
+backend/.cache/
+
 # OS
 .DS_Store
 Thumbs.db

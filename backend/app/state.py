@@ -17,6 +17,7 @@ class LaptopSessionState(BaseModel):
     is_ready_to_search: bool = False
     next_question_to_user: Optional[str] = None
     top_matched_laptops: list[dict] = Field(default_factory=list)
+    live_price_results: list[dict] = Field(default_factory=list)
     final_recommendation_markdown: Optional[str] = None
 
     def add_user_message(self, content: str) -> None:

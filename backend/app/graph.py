@@ -6,6 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.agents.evaluator import StructuredExtractor, build_evaluator_node
 from app.agents.hardware_architect import derive_hardware_requirements
+from app.live_price_tool import ShoppingSearchClient, fetch_live_prices
+from app.price_cache import PriceCache
 from app.retrieval import fetch_candidates
 from app.scoring import score_candidates, select_top_picks
 from app.state import LaptopSessionState
@@ -51,20 +53,41 @@ def build_search_node(session_factory: SessionFactory | None = None):
     return search_node
 
 
+def build_live_price_node(
+    shopping_client: ShoppingSearchClient | None = None,
+    price_cache: PriceCache | None = None,
+):
+    """
+    Phase 5: fetches live prices/sellers/ratings/links for the EXACT
+    `top_matched_laptops` Phase 4 just produced. Runs immediately after
+    `search` in the graph -- never as a separate/parallel workflow.
+    """
+
+    def live_price_node(state: LaptopSessionState) -> dict:
+        results = fetch_live_prices(state.top_matched_laptops, shopping_client, price_cache)
+        return {"live_price_results": results}
+
+    return live_price_node
+
+
 def build_graph(
     structured_extractor: StructuredExtractor | None = None,
     session_factory: SessionFactory | None = None,
+    shopping_client: ShoppingSearchClient | None = None,
+    price_cache: PriceCache | None = None,
 ):
     graph = StateGraph(LaptopSessionState)
     graph.add_node("evaluator", build_evaluator_node(structured_extractor))
     graph.add_node("search", build_search_node(session_factory))
+    graph.add_node("live_price", build_live_price_node(shopping_client, price_cache))
     graph.set_entry_point("evaluator")
     graph.add_conditional_edges(
         "evaluator",
         route_after_evaluator,
         {"ask": END, "search": "search"},
     )
-    graph.add_edge("search", END)
+    graph.add_edge("search", "live_price")
+    graph.add_edge("live_price", END)
     return graph.compile()
 
 
@@ -73,10 +96,12 @@ def run_turn(
     user_message: str,
     structured_extractor: StructuredExtractor | None = None,
     session_factory: SessionFactory | None = None,
+    shopping_client: ShoppingSearchClient | None = None,
+    price_cache: PriceCache | None = None,
 ) -> LaptopSessionState:
     """Append the user's message, run one pass of the graph, return the updated session state."""
     state.add_user_message(user_message)
-    compiled = build_graph(structured_extractor, session_factory)
+    compiled = build_graph(structured_extractor, session_factory, shopping_client, price_cache)
     result = compiled.invoke(state)
     if isinstance(result, LaptopSessionState):
         return result

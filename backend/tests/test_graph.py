@@ -2,7 +2,7 @@ from app.agents.evaluator import EvaluatorExtraction
 from app.graph import route_after_evaluator, run_turn
 from app.state import LaptopSessionState
 from tests.conftest import make_laptop, make_session_factory
-from tests.fakes import FakeStructuredExtractor
+from tests.fakes import FakeShoppingClient, FakeStructuredExtractor
 
 
 def _sample_session_factory():
@@ -59,7 +59,9 @@ def test_first_turn_asks_a_clarifying_question():
     assert result.conversation_history[-1]["role"] == "assistant"
 
 
-def test_multi_turn_conversation_reaches_ready_state():
+def test_multi_turn_conversation_reaches_ready_state(tmp_path):
+    from app.price_cache import PriceCache
+
     state = LaptopSessionState()
 
     state = run_turn(
@@ -83,6 +85,8 @@ def test_multi_turn_conversation_reaches_ready_state():
             [EvaluatorExtraction(gaming_preference="AAA", os_preference="Windows")]
         ),
         session_factory=_sample_session_factory(),
+        shopping_client=FakeShoppingClient({"shopping_results": []}),
+        price_cache=PriceCache(path=tmp_path / "cache.json"),
     )
 
     assert state.is_ready_to_search is True
@@ -93,10 +97,17 @@ def test_multi_turn_conversation_reaches_ready_state():
     assert state.gaming_preference == "AAA"
     # ready-turn shouldn't append a new assistant question to the transcript
     assert state.conversation_history[-1] == {"role": "user", "content": "AAA titles, and Windows please"}
-    # the search pipeline should have run and populated top picks
+    # the search pipeline (Phase 4) should have run and populated top picks
     assert len(state.top_matched_laptops) == 3
     reasons = {pick["selection_reason"] for pick in state.top_matched_laptops}
     assert any("Best Overall" in r for r in reasons)
+
+    # Phase 5 must consume exactly Phase 4's top picks, in the same graph run --
+    # not a separate/disconnected workflow.
+    assert len(state.live_price_results) == len(state.top_matched_laptops)
+    for top_pick, price_result in zip(state.top_matched_laptops, state.live_price_results):
+        assert price_result["laptop_id"] == top_pick["id"]
+        assert price_result["model_name"] == top_pick["model_name"]
 
 
 def test_ready_state_does_not_clobber_previously_collected_slots():
