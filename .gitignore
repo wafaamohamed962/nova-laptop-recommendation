@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Env files with secrets (keep the .env.example templates)
+.env
+backend/.env
+
+# Local SQLite DB (regenerate via `python ingest.py`)
+backend/laptops.db
+*.db
+
+# OS
+.DS_Store
+Thumbs.db
