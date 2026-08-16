@@ -23,6 +23,7 @@ from app.cleaning import (
     clean_model_name,
     parse_battery_hours,
     parse_gpu_name,
+    parse_gpu_vram_gb,
     parse_ram_expandable,
     resolve_processor_brand_and_ghz,
 )
@@ -38,6 +39,7 @@ def clean_row(row: pd.Series) -> LaptopIngestRecord:
     processor_brand, cpu_ghz = resolve_processor_brand_and_ghz(
         row["processor_brand"], row["ghz"], row["processor_name"]
     )
+    has_dedicated_gpu = bool(row["has_dedicated_gpu"])
     return LaptopIngestRecord(
         brand=str(row["brand"]).strip(),
         model_name=clean_model_name(str(row["name"])),
@@ -49,7 +51,8 @@ def clean_row(row: pd.Series) -> LaptopIngestRecord:
         storage_gb=int(row["storage_gb"]),
         screen_size_inches=(None if pd.isna(row["screen_size_inches"]) else float(row["screen_size_inches"])),
         gpu_name=parse_gpu_name(row["gpu"]),
-        has_dedicated_gpu=bool(row["has_dedicated_gpu"]),
+        gpu_vram_gb=parse_gpu_vram_gb(row["gpu"], has_dedicated_gpu),
+        has_dedicated_gpu=has_dedicated_gpu,
         os=str(row["os"]).strip(),
         battery_life_hours=parse_battery_hours(row["battery_life"]),
         baseline_price=None,  # not present in the source dataset; populated live in Phase 5

@@ -19,3 +19,6 @@ backend/laptops.db
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code local tooling state
+.claude/

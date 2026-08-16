@@ -66,6 +66,7 @@ def test_run_ingestion_dedupes_cleans_and_loads(tmp_path):
 
     dell = next(r for r in rows if r.brand == "Dell")
     assert dell.gpu_name == "GeForce RTX 3050"
+    assert dell.gpu_vram_gb == 4.0
     assert dell.battery_life_hours is None  # "45W Adapter" is not a valid hours value
     assert dell.baseline_price is None
 

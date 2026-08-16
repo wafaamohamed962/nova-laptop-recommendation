@@ -11,6 +11,7 @@ import re
 _GHZ_RE = re.compile(r"([\d.]+)\s*Ghz", re.IGNORECASE)
 _BATTERY_HOURS_RE = re.compile(r"Upto\s*([\d.]+)\s*Hrs", re.IGNORECASE)
 _NUMERIC_RE = re.compile(r"^\d+(\.\d+)?$")
+_VRAM_GB_RE = re.compile(r"([\d.]+)\s*GB", re.IGNORECASE)
 
 _BRAND_KEYWORDS = [
     ("Apple", ("apple", " m1", " m2", " m3", " m4")),
@@ -98,3 +99,16 @@ def parse_gpu_name(raw: object) -> str | None:
     text = str(raw).split(",")[0].strip()
     text = re.sub(r"\s*GPU$", "", text, flags=re.IGNORECASE).strip()
     return text or None
+
+
+def parse_gpu_vram_gb(raw: object, has_dedicated_gpu: bool) -> float | None:
+    """
+    'GeForce RTX 3050 GPU, 4 GB' -> 4.0. Only meaningful for dedicated GPUs --
+    integrated graphics sometimes list a shared-memory figure in MB (e.g.
+    'UHD GPU, 128 MB'), which isn't real VRAM, so this always returns None
+    when has_dedicated_gpu is False regardless of what the raw text says.
+    """
+    if not has_dedicated_gpu or is_missing(raw):
+        return None
+    match = _VRAM_GB_RE.search(str(raw))
+    return float(match.group(1)) if match else None

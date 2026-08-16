@@ -1,7 +1,39 @@
 from app.agents.evaluator import EvaluatorExtraction
 from app.graph import route_after_evaluator, run_turn
 from app.state import LaptopSessionState
+from tests.conftest import make_laptop, make_session_factory
 from tests.fakes import FakeStructuredExtractor
+
+
+def _sample_session_factory():
+    return make_session_factory(
+        [
+            make_laptop(os="Windows", ram_gb=16, has_dedicated_gpu=True, gpu_vram_gb=6.0, cpu_ghz=3.5),
+            make_laptop(os="Windows", ram_gb=32, has_dedicated_gpu=True, gpu_vram_gb=8.0, cpu_ghz=4.2),
+            make_laptop(os="Windows", ram_gb=8, has_dedicated_gpu=False, cpu_ghz=2.0),
+            make_laptop(os="Windows", ram_gb=16, has_dedicated_gpu=True, gpu_vram_gb=4.0, cpu_ghz=3.0),
+            make_laptop(os="macOS", ram_gb=16, has_dedicated_gpu=True, gpu_vram_gb=4.0, cpu_ghz=3.2),
+        ]
+    )
+
+
+def test_search_node_populates_top_matched_laptops_directly():
+    from app.graph import build_search_node
+
+    node = build_search_node(session_factory=_sample_session_factory())
+    state = LaptopSessionState(
+        intent="gaming",
+        budget_max=2000,
+        os_preference="Windows",
+        gaming_preference="AAA",
+        is_ready_to_search=True,
+    )
+
+    updates = node(state)
+
+    assert "top_matched_laptops" in updates
+    assert len(updates["top_matched_laptops"]) == 3
+    assert all(pick["os"] == "Windows" for pick in updates["top_matched_laptops"])
 
 
 def test_route_after_evaluator_ask_when_not_ready():
@@ -50,6 +82,7 @@ def test_multi_turn_conversation_reaches_ready_state():
         structured_extractor=FakeStructuredExtractor(
             [EvaluatorExtraction(gaming_preference="AAA", os_preference="Windows")]
         ),
+        session_factory=_sample_session_factory(),
     )
 
     assert state.is_ready_to_search is True
@@ -60,6 +93,10 @@ def test_multi_turn_conversation_reaches_ready_state():
     assert state.gaming_preference == "AAA"
     # ready-turn shouldn't append a new assistant question to the transcript
     assert state.conversation_history[-1] == {"role": "user", "content": "AAA titles, and Windows please"}
+    # the search pipeline should have run and populated top picks
+    assert len(state.top_matched_laptops) == 3
+    reasons = {pick["selection_reason"] for pick in state.top_matched_laptops}
+    assert any("Best Overall" in r for r in reasons)
 
 
 def test_ready_state_does_not_clobber_previously_collected_slots():
@@ -69,9 +106,15 @@ def test_ready_state_does_not_clobber_previously_collected_slots():
     )
     extractor = FakeStructuredExtractor([EvaluatorExtraction(budget_max=1200)])
 
-    result = run_turn(state, "Actually bump my budget to $1200", structured_extractor=extractor)
+    result = run_turn(
+        state,
+        "Actually bump my budget to $1200",
+        structured_extractor=extractor,
+        session_factory=_sample_session_factory(),
+    )
 
     assert result.budget_max == 1200
     assert result.intent == "work"
     assert result.os_preference == "macOS"
     assert result.is_ready_to_search is True
+    assert len(result.top_matched_laptops) >= 1

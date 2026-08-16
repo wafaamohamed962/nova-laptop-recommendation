@@ -28,6 +28,7 @@ class Laptop(Base):
     storage_gb: Mapped[int] = mapped_column(Integer, nullable=False)
     screen_size_inches: Mapped[float | None] = mapped_column(Float, nullable=True)
     gpu_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    gpu_vram_gb: Mapped[float | None] = mapped_column(Float, nullable=True)
     has_dedicated_gpu: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     os: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     battery_life_hours: Mapped[float | None] = mapped_column(Float, nullable=True)

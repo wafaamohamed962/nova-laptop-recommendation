@@ -14,6 +14,7 @@ class LaptopIngestRecord(BaseModel):
     storage_gb: int = Field(ge=0, le=16384)
     screen_size_inches: float | None = Field(default=None, ge=8.0, le=20.0)
     gpu_name: str | None = None
+    gpu_vram_gb: float | None = Field(default=None, ge=0.0, le=64.0)
     has_dedicated_gpu: bool
     os: str
     battery_life_hours: float | None = Field(default=None, ge=0.0, le=48.0)

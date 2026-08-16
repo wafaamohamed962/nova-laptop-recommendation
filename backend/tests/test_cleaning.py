@@ -7,6 +7,7 @@ from app.cleaning import (
     extract_ghz,
     parse_battery_hours,
     parse_gpu_name,
+    parse_gpu_vram_gb,
     parse_ram_expandable,
     resolve_processor_brand_and_ghz,
 )
@@ -129,3 +130,18 @@ def test_parse_gpu_name_whitespace_only_is_none():
 
 def test_parse_gpu_name_strips_surrounding_whitespace():
     assert parse_gpu_name("  Iris Xe  ") == "Iris Xe"
+
+
+@pytest.mark.parametrize(
+    ("raw", "has_dedicated_gpu", "expected"),
+    [
+        ("GeForce RTX 3050 GPU, 4 GB", True, 4.0),
+        ("GeForce RTX 4050 GPU, 6 GB", True, 6.0),
+        ("GeForce RTX 3050 GPU, 4 GB", False, None),  # dedicated flag disagrees -> distrust text
+        ("Iris Xe", True, None),  # no GB figure present
+        ("UHD GPU, 128 MB", False, None),  # shared memory in MB, not real VRAM
+        (float("nan"), True, None),
+    ],
+)
+def test_parse_gpu_vram_gb(raw, has_dedicated_gpu, expected):
+    assert parse_gpu_vram_gb(raw, has_dedicated_gpu) == expected
