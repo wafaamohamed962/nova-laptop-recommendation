@@ -25,7 +25,7 @@ load_dotenv()
 
 BASE_URL = os.environ.get("VLLM_BASE_URL")
 API_KEY = os.environ.get("VLLM_API_KEY")
-MODEL_NAME = os.environ.get("VLLM_SERVED_MODEL_NAME", "qwen2.5-7b-instruct")
+MODEL_NAME = os.environ.get("VLLM_SERVED_MODEL_NAME", "qwen3-4b-instruct")
 
 
 class ExtractedLaptopSlots(BaseModel):

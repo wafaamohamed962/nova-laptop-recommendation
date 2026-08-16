@@ -1,10 +1,10 @@
 """
 Database Retriever: turns HardwareRequirements into a SQLAlchemy query and
-runs it. If the strict requirements are too narrow for this catalog (common
-with a specific OS + dedicated-GPU + high-RAM combination), progressively
-relaxes constraints -- dropping the GPU requirement, then lowering the RAM
-floor, then dropping the OS filter -- until at least `min_results` candidates
-come back, or we run out of relaxation steps. This guarantees the downstream
+runs it. If the strict requirements are too narrow for this catalog,
+progressively relaxes constraints -- dropping brand first (a soft
+preference), then the GPU requirement, then lowering the RAM floor, then
+dropping the OS filter -- until at least `min_results` candidates come back,
+or we run out of relaxation steps. This guarantees the downstream
 scorer/selector always has something to work with.
 """
 
@@ -15,8 +15,12 @@ from app.models import Laptop
 
 RelaxationStep = tuple[str, ...]
 
-# Each step names which constraints are still enforced, in decreasing strictness.
+# Each step names which constraints are still enforced, in decreasing
+# strictness. Brand is dropped first: it's a stated preference, not a
+# functional requirement like OS/GPU/RAM, so it shouldn't be able to block
+# getting any results at all.
 _RELAXATION_STEPS: list[RelaxationStep] = [
+    ("brand", "os", "gpu", "ram"),
     ("os", "gpu", "ram"),
     ("os", "ram"),
     ("ram",),
@@ -25,6 +29,8 @@ _RELAXATION_STEPS: list[RelaxationStep] = [
 
 
 def _apply_requirements(query, requirements: HardwareRequirements, active: RelaxationStep):
+    if "brand" in active and requirements.get("brand"):
+        query = query.filter(Laptop.brand.ilike(requirements["brand"]))
     if "os" in active and requirements["os"]:
         query = query.filter(Laptop.os == requirements["os"])
     if "gpu" in active and requirements["require_dedicated_gpu"]:
@@ -37,7 +43,7 @@ def _apply_requirements(query, requirements: HardwareRequirements, active: Relax
 def fetch_candidates(
     session: Session,
     requirements: HardwareRequirements,
-    min_results: int = 5,
+    min_results: int = 10,
 ) -> tuple[list[Laptop], list[str]]:
     """Returns (candidates, relaxation_notes). relaxation_notes is empty if the
     strict requirements were satisfiable as-is."""
@@ -50,7 +56,7 @@ def fetch_candidates(
         is_last_step = step_index == len(_RELAXATION_STEPS) - 1
         if len(results) >= min_results or is_last_step:
             if step_index > 0:
-                dropped = [c for c in ("os", "gpu", "ram") if c not in active]
+                dropped = [c for c in ("brand", "os", "gpu", "ram") if c not in active]
                 notes.append(
                     f"Not enough exact matches; relaxed constraint(s) [{', '.join(dropped)}] "
                     f"to find {len(results)} candidates."

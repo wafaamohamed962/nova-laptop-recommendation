@@ -5,21 +5,23 @@ hardware requirements for the DB Retriever.
 Deliberately excludes budget_max. There's no price data in the static
 dataset (see ingest.py), so nothing here can be filtered by price yet --
 that only becomes possible once Phase 5 fetches live prices for the
-already-selected top 3 candidates. Reconciling budget against those live
-prices is the Advisor's job (Phase 6), not this stage's.
+already-selected top candidates. Budget is enforced as a hard filter in
+app/response_mapping.py once those live prices are known.
 """
 
-from typing import TypedDict
+from typing import Optional, TypedDict
 
 from app.state import LaptopSessionState
 
 _GAMING_OR_AI_MIN_RAM_GB = 16
 _CASUAL_MIN_RAM_GB = 8
 _DEFAULT_MIN_RAM_GB = 8
+_NO_PREFERENCE_VALUES = ("no preference", "any", "none")
 
 
 class HardwareRequirements(TypedDict):
-    os: str | None  # None means no OS filter
+    os: Optional[str]  # None means no OS filter
+    brand: Optional[str]  # None means no brand filter
     min_ram_gb: int
     require_dedicated_gpu: bool
 
@@ -36,8 +38,13 @@ def derive_hardware_requirements(state: LaptopSessionState) -> HardwareRequireme
 
     os_filter = state.os_preference if state.os_preference not in (None, "no preference") else None
 
+    brand_filter = None
+    if state.brand_preference and state.brand_preference.strip().lower() not in _NO_PREFERENCE_VALUES:
+        brand_filter = state.brand_preference.strip()
+
     return HardwareRequirements(
         os=os_filter,
+        brand=brand_filter,
         min_ram_gb=min_ram_gb,
         require_dedicated_gpu=needs_dedicated_gpu,
     )

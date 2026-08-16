@@ -53,3 +53,27 @@ def test_budget_max_never_appears_in_requirements():
     req = derive_hardware_requirements(state)
     assert "budget_max" not in req
     assert "baseline_price" not in req
+
+
+def test_brand_preference_passed_through():
+    state = LaptopSessionState(brand_preference="ASUS")
+    req = derive_hardware_requirements(state)
+    assert req["brand"] == "ASUS"
+
+
+def test_brand_preference_strips_whitespace():
+    state = LaptopSessionState(brand_preference="  Dell  ")
+    req = derive_hardware_requirements(state)
+    assert req["brand"] == "Dell"
+
+
+def test_no_brand_preference_means_no_filter():
+    state = LaptopSessionState(brand_preference="no preference")
+    req = derive_hardware_requirements(state)
+    assert req["brand"] is None
+
+
+def test_unset_brand_preference_means_no_filter():
+    state = LaptopSessionState(brand_preference=None)
+    req = derive_hardware_requirements(state)
+    assert req["brand"] is None

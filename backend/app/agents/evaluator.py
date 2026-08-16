@@ -37,7 +37,11 @@ gaming was never discussed.
 or similar; false if they explicitly say they don't need that; null if never discussed.
 - os_preference: "Windows", "macOS", "Linux", or "no preference" if they say they're \
 flexible. Leave null if never discussed.
-- budget_max: the maximum amount in USD the user is willing to spend, as a number.
+- brand_preference: the specific brand they want (e.g. "ASUS", "Dell", "HP", "Lenovo", \
+"MSI", "Apple"), or "no preference" if they say they're open to any brand. Leave null \
+if never discussed.
+- budget_max: the maximum amount in US dollars (USD) the user is willing to spend, as \
+a plain number.
 
 Here is what we already know from earlier in the conversation (do not repeat it in \
 your extraction unless the user just changed it): {known_state}
@@ -45,11 +49,12 @@ your extraction unless the user just changed it): {known_state}
 
 QUESTION_TEMPLATES: dict[str, str] = {
     "intent": "To start, what will you mainly use this laptop for — school, gaming, work, or something else?",
-    "budget_max": "What's your budget for this laptop — roughly the max you'd like to spend?",
+    "budget_max": "What's your budget for this laptop, in US dollars — roughly the max you'd like to spend?",
     "gaming_or_ai": (
         "Will you be doing any gaming, or running AI/ML workloads like local LLMs, on this laptop?"
     ),
     "os_preference": "Do you have an OS preference — Windows, macOS, Linux — or no preference?",
+    "brand_preference": "Do you have a brand preference — like ASUS, Dell, HP, Lenovo, MSI, or Apple — or no preference?",
     "major": "What's your major or field of study? That helps me match the right specs.",
 }
 
@@ -60,6 +65,7 @@ class EvaluatorExtraction(BaseModel):
     gaming_preference: Optional[Literal["AAA", "casual", "none"]] = None
     ai_workload: Optional[bool] = None
     os_preference: Optional[Literal["Windows", "macOS", "Linux", "no preference"]] = None
+    brand_preference: Optional[str] = None
     budget_max: Optional[float] = None
 
 
@@ -72,7 +78,7 @@ class StructuredExtractor(Protocol):
 
 _UNIVERSITY_KEYWORDS = ("university", "college", "student", "school")
 
-_ALWAYS_REQUIRED = ("intent", "budget_max", "os_preference")
+_ALWAYS_REQUIRED = ("intent", "budget_max", "os_preference", "brand_preference")
 
 
 def build_messages(state: LaptopSessionState) -> list:
@@ -82,6 +88,7 @@ def build_messages(state: LaptopSessionState) -> list:
         "gaming_preference": state.gaming_preference,
         "ai_workload": state.ai_workload,
         "os_preference": state.os_preference,
+        "brand_preference": state.brand_preference,
         "budget_max": state.budget_max,
     }
     messages: list = [SystemMessage(content=SYSTEM_PROMPT.format(known_state=known_state))]
@@ -107,7 +114,8 @@ def merge_extraction(state: LaptopSessionState, extraction: EvaluatorExtraction)
 def compute_readiness(merged_values: dict) -> tuple[bool, Optional[str]]:
     """
     merged_values: the session's slot values *after* applying this turn's updates
-    (intent, major, gaming_preference, ai_workload, os_preference, budget_max).
+    (intent, major, gaming_preference, ai_workload, os_preference, brand_preference,
+    budget_max).
 
     Returns (is_ready_to_search, next_question_to_user_or_None).
     """
@@ -149,6 +157,7 @@ def build_evaluator_node(structured_extractor: StructuredExtractor | None = None
             "gaming_preference": slot_updates.get("gaming_preference", state.gaming_preference),
             "ai_workload": slot_updates.get("ai_workload", state.ai_workload),
             "os_preference": slot_updates.get("os_preference", state.os_preference),
+            "brand_preference": slot_updates.get("brand_preference", state.brand_preference),
             "budget_max": slot_updates.get("budget_max", state.budget_max),
         }
         is_ready, next_question = compute_readiness(merged_values)

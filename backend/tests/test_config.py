@@ -5,7 +5,8 @@ def test_settings_defaults_to_local_sqlite():
     settings = Settings(_env_file=None)
     assert settings.database_url == "sqlite:///./laptops.db"
     assert settings.vllm_base_url is None
-    assert settings.vllm_served_model_name == "qwen2.5-7b-instruct"
+    assert settings.vllm_served_model_name == "qwen3-4b-instruct"
+    assert settings.cors_allow_origins_list == ["http://localhost:5173"]
 
 
 def test_settings_reads_env_vars(monkeypatch):

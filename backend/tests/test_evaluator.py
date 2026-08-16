@@ -41,12 +41,29 @@ def test_compute_readiness_missing_budget():
     assert "budget" in question.lower()
 
 
+def test_compute_readiness_missing_os_preference():
+    ready, question = compute_readiness(
+        {"intent": "gaming", "budget_max": 1500, "gaming_preference": "AAA"}
+    )
+    assert ready is False
+    assert "os preference" in question.lower()
+
+
+def test_compute_readiness_missing_brand_preference():
+    ready, question = compute_readiness(
+        {"intent": "gaming", "budget_max": 1500, "os_preference": "Windows", "gaming_preference": "AAA"}
+    )
+    assert ready is False
+    assert "brand" in question.lower()
+
+
 def test_compute_readiness_university_intent_requires_major():
     ready, question = compute_readiness(
         {
             "intent": "university",
             "budget_max": 1200,
             "os_preference": "Windows",
+            "brand_preference": "no preference",
             "gaming_preference": "none",
             "major": None,
         }
@@ -57,7 +74,12 @@ def test_compute_readiness_university_intent_requires_major():
 
 def test_compute_readiness_missing_gaming_and_ai_signal():
     ready, question = compute_readiness(
-        {"intent": "work", "budget_max": 1200, "os_preference": "Windows"}
+        {
+            "intent": "work",
+            "budget_max": 1200,
+            "os_preference": "Windows",
+            "brand_preference": "no preference",
+        }
     )
     assert ready is False
     assert "gaming" in question.lower() or "ai" in question.lower()
@@ -69,6 +91,7 @@ def test_compute_readiness_true_when_all_core_slots_present():
             "intent": "gaming",
             "budget_max": 1500,
             "os_preference": "Windows",
+            "brand_preference": "ASUS",
             "gaming_preference": "AAA",
         }
     )
@@ -111,6 +134,7 @@ def test_compute_readiness_true_for_university_with_major_and_no_gaming():
             "intent": "university, computer science",
             "budget_max": 1200,
             "os_preference": "no preference",
+            "brand_preference": "no preference",
             "major": "Computer Science",
             "ai_workload": True,
         }

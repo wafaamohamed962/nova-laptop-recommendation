@@ -116,7 +116,10 @@ def test_select_top_picks_returns_three_distinct_with_labels():
     # Overall and the raw max-spec Power pick land on different laptops.
     scored = score_candidates(laptops, LaptopSessionState(major="Medicine"))
 
-    picks = select_top_picks(scored)
+    # min_count=3 here: this test is specifically about the 3 named-category
+    # labels, not the "at least N" runner-up behavior (see
+    # test_select_top_picks_fills_up_to_min_count_with_runner_ups for that).
+    picks = select_top_picks(scored, min_count=3)
 
     assert len(picks) == 3
     ids = [p["id"] for p in picks]
@@ -134,6 +137,30 @@ def test_select_top_picks_returns_three_distinct_with_labels():
 
     best_overall = next(p for p in picks if "Best Overall" in p["selection_reason"])
     assert best_overall["cpu_ghz"] == 2.5  # the balanced/portable pick, not the raw max-spec one
+
+
+def test_select_top_picks_fills_up_to_min_count_with_runner_ups():
+    laptops = _committed(*[make_laptop(cpu_ghz=1.0 + i * 0.5, ram_gb=8 + i) for i in range(10)])
+    scored = score_candidates(laptops, LaptopSessionState())
+
+    picks = select_top_picks(scored, min_count=5)
+
+    assert len(picks) == 5
+    ids = [p["id"] for p in picks]
+    assert len(set(ids)) == len(ids)  # no duplicates
+    # the 2 extra beyond the 3 named categories are still valid, labeled picks
+    categories_seen = {p["selection_reason"] for p in picks}
+    assert any("Great Match" in r for r in categories_seen)
+
+
+def test_select_top_picks_returns_fewer_than_min_count_when_pool_is_smaller():
+    """Can't fabricate laptops that don't exist in the filtered pool."""
+    laptops = _committed(*[make_laptop(cpu_ghz=1.0 + i) for i in range(4)])
+    scored = score_candidates(laptops, LaptopSessionState())
+
+    picks = select_top_picks(scored, min_count=8)
+
+    assert len(picks) == 4
 
 
 def test_select_top_picks_dedupes_when_pool_smaller_than_three():

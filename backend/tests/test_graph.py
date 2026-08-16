@@ -12,6 +12,13 @@ def _sample_session_factory():
             make_laptop(os="Windows", ram_gb=32, has_dedicated_gpu=True, gpu_vram_gb=8.0, cpu_ghz=4.2),
             make_laptop(os="Windows", ram_gb=8, has_dedicated_gpu=False, cpu_ghz=2.0),
             make_laptop(os="Windows", ram_gb=16, has_dedicated_gpu=True, gpu_vram_gb=4.0, cpu_ghz=3.0),
+            make_laptop(os="Windows", ram_gb=16, has_dedicated_gpu=True, gpu_vram_gb=4.0, cpu_ghz=2.8),
+            make_laptop(os="Windows", ram_gb=24, has_dedicated_gpu=True, gpu_vram_gb=6.0, cpu_ghz=3.2),
+            make_laptop(os="Windows", ram_gb=16, has_dedicated_gpu=True, gpu_vram_gb=8.0, cpu_ghz=3.6),
+            make_laptop(os="Windows", ram_gb=32, has_dedicated_gpu=True, gpu_vram_gb=12.0, cpu_ghz=4.5),
+            make_laptop(os="Windows", ram_gb=16, has_dedicated_gpu=True, gpu_vram_gb=6.0, cpu_ghz=3.1),
+            make_laptop(os="Windows", ram_gb=16, has_dedicated_gpu=True, gpu_vram_gb=4.0, cpu_ghz=2.9),
+            make_laptop(os="Windows", ram_gb=32, has_dedicated_gpu=True, gpu_vram_gb=10.0, cpu_ghz=4.0),
             make_laptop(os="macOS", ram_gb=16, has_dedicated_gpu=True, gpu_vram_gb=4.0, cpu_ghz=3.2),
         ]
     )
@@ -32,8 +39,28 @@ def test_search_node_populates_top_matched_laptops_directly():
     updates = node(state)
 
     assert "top_matched_laptops" in updates
-    assert len(updates["top_matched_laptops"]) == 3
+    assert len(updates["top_matched_laptops"]) >= 5
     assert all(pick["os"] == "Windows" for pick in updates["top_matched_laptops"])
+
+
+def test_live_price_node_calls_shopping_client_for_each_pick(tmp_path):
+    from app.graph import build_live_price_node
+    from app.price_cache import PriceCache
+
+    shopping_client = FakeShoppingClient({"shopping_results": []})
+    node = build_live_price_node(
+        shopping_client=shopping_client, price_cache=PriceCache(path=tmp_path / "cache.json")
+    )
+    state = LaptopSessionState(
+        top_matched_laptops=[
+            {"id": 1, "brand": "ASUS", "model_name": "ROG Zephyrus G14"},
+            {"id": 2, "brand": "Dell", "model_name": "XPS 15"},
+        ],
+    )
+
+    node(state)
+
+    assert shopping_client.queries == ["ASUS ROG Zephyrus G14", "Dell XPS 15"]
 
 
 def test_route_after_evaluator_ask_when_not_ready():
@@ -80,6 +107,13 @@ def test_multi_turn_conversation_reaches_ready_state(tmp_path):
 
     state = run_turn(
         state,
+        "No brand preference",
+        structured_extractor=FakeStructuredExtractor([EvaluatorExtraction(brand_preference="no preference")]),
+    )
+    assert state.is_ready_to_search is False
+
+    state = run_turn(
+        state,
         "AAA titles, and Windows please",
         structured_extractor=FakeStructuredExtractor(
             [EvaluatorExtraction(gaming_preference="AAA", os_preference="Windows")]
@@ -93,12 +127,13 @@ def test_multi_turn_conversation_reaches_ready_state(tmp_path):
     assert state.next_question_to_user is None
     assert state.intent == "gaming"
     assert state.budget_max == 1500
+    assert state.brand_preference == "no preference"
     assert state.os_preference == "Windows"
     assert state.gaming_preference == "AAA"
     # ready-turn shouldn't append a new assistant question to the transcript
     assert state.conversation_history[-1] == {"role": "user", "content": "AAA titles, and Windows please"}
     # the search pipeline (Phase 4) should have run and populated top picks
-    assert len(state.top_matched_laptops) == 3
+    assert len(state.top_matched_laptops) >= 5
     reasons = {pick["selection_reason"] for pick in state.top_matched_laptops}
     assert any("Best Overall" in r for r in reasons)
 
@@ -113,7 +148,11 @@ def test_multi_turn_conversation_reaches_ready_state(tmp_path):
 def test_ready_state_does_not_clobber_previously_collected_slots():
     """A later turn that only supplies one new slot must not wipe out earlier ones."""
     state = LaptopSessionState(
-        intent="work", budget_max=1000, os_preference="macOS", gaming_preference="none"
+        intent="work",
+        budget_max=1000,
+        os_preference="macOS",
+        gaming_preference="none",
+        brand_preference="no preference",
     )
     extractor = FakeStructuredExtractor([EvaluatorExtraction(budget_max=1200)])
 

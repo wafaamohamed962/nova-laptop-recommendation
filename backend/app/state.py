@@ -13,7 +13,8 @@ class LaptopSessionState(BaseModel):
     gaming_preference: Optional[GamingPreference] = None
     ai_workload: Optional[bool] = None  # True if user needs to run local LLMs
     os_preference: Optional[OsPreference] = None
-    budget_max: Optional[float] = None  # e.g., 1200.0
+    brand_preference: Optional[str] = None  # e.g. "ASUS", "Dell", or "no preference"
+    budget_max: Optional[float] = None  # max spend in USD
     is_ready_to_search: bool = False
     next_question_to_user: Optional[str] = None
     top_matched_laptops: list[dict] = Field(default_factory=list)

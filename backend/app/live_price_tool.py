@@ -1,15 +1,17 @@
 """
 Phase 5 — Live Price Tool.
 
-Takes the EXACT Top 3 laptops Phase 4 already selected (`top_matched_laptops`,
+Takes the top-matched laptops Phase 4 already selected (`top_matched_laptops`,
 produced by app.scoring.select_top_picks) and enriches each one with live
 titles, prices, sellers, ratings, and product links from SerpApi Google Shopping,
 caching successful lookups locally for 24h. This module does not select or
 re-rank laptops -- it only looks up prices for laptops someone else already
-chose.
+chose. Budget enforcement (excluding anything over budget) happens downstream
+in app/response_mapping.py, once these live prices are known.
 """
 
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Optional, Protocol
 
@@ -18,6 +20,13 @@ from app.price_schemas import LivePriceResult, PriceListing
 from app.serpapi_client import SerpApiError, search_google_shopping
 
 logger = logging.getLogger(__name__)
+
+# `model_name` in the catalog is the raw scraped listing title, e.g.
+# "MSI Titan 18 HX A14VHG-207IN Laptop (18 Inch | Core i9 14th Gen | 64 GB |
+# Windows 11 | 2 TB SSD)" -- everything from " Laptop (" onward is a spec
+# dump, not part of the product name. Left in, it produces a huge query with
+# literal "|" characters that SerpApi rejects outright with a 400.
+_SPEC_DUMP_RE = re.compile(r"\s+Laptop\s*\(.*$", re.IGNORECASE)
 
 
 class ShoppingSearchClient(Protocol):
@@ -33,7 +42,15 @@ class SerpApiShoppingClient:
 
 
 def build_query(laptop: dict) -> str:
-    return f"{laptop.get('brand', '')} {laptop.get('model_name', '')}".strip()
+    brand = (laptop.get("brand") or "").strip()
+    model_name = (laptop.get("model_name") or "").strip()
+    clean_model = _SPEC_DUMP_RE.sub("", model_name).strip()
+
+    # model_name already starts with the brand name in this catalog -- only
+    # prepend brand if it doesn't, rather than always duplicating it.
+    if brand and clean_model.lower().startswith(brand.lower()):
+        return clean_model
+    return f"{brand} {clean_model}".strip()
 
 
 def _normalize(raw: dict, limit: int = 5) -> list[PriceListing]:

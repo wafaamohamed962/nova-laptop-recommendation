@@ -3,8 +3,10 @@ Multi-Criteria Scoring & Top-k Selector Engine.
 
 Scores each candidate on four dimensions (performance, VRAM, portability,
 value), weighted by a persona profile derived from the session's major/intent/
-gaming/AI signals, then picks 3 diverse laptops: the best weighted match, a
-lean/lower-spec "budget" pick, and a max-spec "power" pick.
+gaming/AI signals, then picks 3 diverse laptops (best weighted match, a
+lean/lower-spec "budget" pick, and a max-spec "power" pick) plus enough
+runner-ups by total score to reach at least min_count candidates for Phase 5
+to price and app/response_mapping.py to hard-filter by budget.
 
 Value-dimension note: there's no price data in the static catalog (see
 ingest.py), so `value_score` is a neutral 0.5 placeholder for every candidate
@@ -17,31 +19,10 @@ from dataclasses import dataclass
 from statistics import median
 
 from app.models import Laptop
+from app.persona import PERFORMANCE_MAJOR_KEYWORDS, PORTABILITY_MAJOR_KEYWORDS
 from app.state import LaptopSessionState
 
 DimensionWeights = dict[str, float]
-
-_PERFORMANCE_MAJOR_KEYWORDS = (
-    "computer science",
-    "software",
-    "engineering",
-    "data science",
-    "artificial intelligence",
-    "machine learning",
-    "information technology",
-)
-_PORTABILITY_MAJOR_KEYWORDS = (
-    "medicine",
-    "medical",
-    "nursing",
-    "business",
-    "law",
-    "arts",
-    "humanities",
-    "design",
-    "journalism",
-    "education",
-)
 
 
 def select_weight_profile(state: LaptopSessionState) -> DimensionWeights:
@@ -49,9 +30,9 @@ def select_weight_profile(state: LaptopSessionState) -> DimensionWeights:
         return {"performance": 0.35, "vram": 0.35, "portability": 0.15, "value": 0.15}
 
     text = f"{state.major or ''} {state.intent or ''}".lower()
-    if any(keyword in text for keyword in _PERFORMANCE_MAJOR_KEYWORDS):
+    if any(keyword in text for keyword in PERFORMANCE_MAJOR_KEYWORDS):
         return {"performance": 0.35, "vram": 0.25, "portability": 0.20, "value": 0.20}
-    if any(keyword in text for keyword in _PORTABILITY_MAJOR_KEYWORDS):
+    if any(keyword in text for keyword in PORTABILITY_MAJOR_KEYWORDS):
         return {"performance": 0.20, "vram": 0.10, "portability": 0.45, "value": 0.25}
     return {"performance": 0.25, "vram": 0.20, "portability": 0.30, "value": 0.25}
 
@@ -146,11 +127,18 @@ def _to_dict(scored: ScoredLaptop, reason: str) -> dict:
     }
 
 
-def select_top_picks(scored: list[ScoredLaptop]) -> list[dict]:
+def select_top_picks(scored: list[ScoredLaptop], min_count: int = 8) -> list[dict]:
     """Best Overall Match (highest weighted score), Budget Saver (lowest raw
     spec footprint -- a proxy pending real prices from Phase 5), and a
-    Power/Future-Proof Pick (highest raw performance+VRAM). Falls back
-    gracefully, and dedupes, when the candidate pool is smaller than 3."""
+    Power/Future-Proof Pick (highest raw performance+VRAM), then fills up to
+    `min_count` total with the next-highest-scoring remaining candidates.
+
+    min_count defaults higher than the "at least 5" the user actually sees:
+    Phase 5's live-price lookup runs on every pick returned here, and
+    app/response_mapping.py then hard-filters out anything over budget, so a
+    buffer beyond 5 meaningfully improves the odds that >=5 *in-budget*
+    laptops actually make it to the final response. Falls back gracefully,
+    and dedupes, when the candidate pool is smaller than min_count."""
     if not scored:
         return []
 
@@ -177,6 +165,14 @@ def select_top_picks(scored: list[ScoredLaptop]) -> list[dict]:
         (budget_saver, "Budget Saver (spec-based estimate; live pricing pending)"),
         (power_pick, "Power / Future-Proof Pick"),
     ]
+
+    chosen.add(identity_key(budget_saver))
+    runners_up = sorted(
+        (s for s in scored if identity_key(s) not in chosen), key=lambda s: s.total_score, reverse=True
+    )
+    extra_needed = max(0, min_count - len(candidates_with_reasons))
+    for scored_laptop in runners_up[:extra_needed]:
+        candidates_with_reasons.append((scored_laptop, "Great Match"))
 
     results: list[dict] = []
     seen: set = set()
